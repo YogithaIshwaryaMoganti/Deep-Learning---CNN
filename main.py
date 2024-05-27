@@ -1,16 +1,64 @@
-# This is a sample Python script.
+#!/usr/bin/env python
+# coding: utf-8
 
-# Press ⌃R to execute it or replace it with your code.
-# Press Double ⇧ to search everywhere for classes, files, tool windows, actions, and settings.
-
-
-def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    print(f'Hi, {name}')  # Press ⌘F8 to toggle the breakpoint.
+# In[1]:
 
 
-# Press the green button in the gutter to run the script.
-if __name__ == '__main__':
-    print_hi('PyCharm')
+from google.cloud import storage
+import tensorflow as tf
+from PIL import Image
+import numpy as np
 
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+model = None
+interpreter = None
+input_index = None
+output_index = None
+
+class_names = ["Early Blight", "Late Blight", "Healthy"]
+
+BUCKET_NAME = "codebasics-tf-models_2"  # Here you need to put the name of your GCP bucket
+
+
+def download_blob(bucket_name, source_blob_name, destination_file_name):
+    """Downloads a blob from the bucket."""
+    storage_client = storage.Client()
+    bucket = storage_client.get_bucket(bucket_name)
+    blob = bucket.blob(source_blob_name)
+
+    blob.download_to_filename(destination_file_name)
+
+    print(f"Blob {source_blob_name} downloaded to {destination_file_name}.")
+
+
+def predict(request):
+    global model
+    if model is None:
+        print("I will download the model now")
+        download_blob(
+            BUCKET_NAME,
+            "models/potatoes.h5",
+            "/tmp/potatoes.h5",
+        )
+        model = tf.keras.models.load_model("/tmp/potatoes.h5")
+        print("model downloaded", model)
+
+    image_file = request.files["file"]
+    image = np.array(Image.open(image_file).convert("RGB").resize((256, 256)))
+    image = image / 255  # normalize the image in the 0 to 1 range
+
+    img_array = tf.expand_dims(image, 0)
+    raw_predictions = model.predict(img_array)
+
+    print(raw_predictions)
+
+    predicted_class = class_names[np.argmax(raw_predictions[0])]
+    confidence = round(100 * np.max(raw_predictions[0]), 2)
+
+    return {"class": predicted_class, "confidence": confidence}
+
+
+# In[ ]:
+
+
+
+
